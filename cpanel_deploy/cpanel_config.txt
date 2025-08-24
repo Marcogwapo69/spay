@@ -1,0 +1,24 @@
+GiyaPay Transaction Manager - cPanel Configuration 
+ 
+Use these settings when creating your Node.js app in cPanel: 
+ 
+Application Details: 
+- Node.js Version: 18 (or latest available) 
+- Application Mode: production 
+- Application Root: /public_html/giyapay-manager 
+- Application URL: https://yourdomain.com 
+- Application Startup File: server.js 
+ 
+Environment Variables (optional): 
+- NODE_ENV: production 
+- PORT: (leave empty, cPanel will auto-assign) 
+ 
+Required Packages to Install: 
+1. express 
+2. cors 
+3. sqlite3 
+ 
+After deployment, your application will be available at: 
+- Main site: https://yourdomain.com 
+- Payment generator: https://yourdomain.com/GiyaPayButtonTest.html 
+- Transaction list: https://yourdomain.com/all-transactions 

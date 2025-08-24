@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Cancelled</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .cancel { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 20px; border-radius: 5px; }
+        .details { background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="cancel">
+        <h2>⚠️ Payment Cancelled</h2>
+        <p>The payment was cancelled by the user.</p>
+    </div>
+    
+    <div class="details">
+        <h3>Transaction Details:</h3>
+        <div id="cancel-details"></div>
+    </div>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const details = document.getElementById('cancel-details');
+        
+        if (urlParams.toString()) {
+            let html = '<ul>';
+            for (const [key, value] of urlParams) {
+                html += `<li><strong>${key}:</strong> ${value}</li>`;
+            }
+            html += '</ul>';
+            details.innerHTML = html;
+        } else {
+            details.innerHTML = '<p>No transaction details available.</p>';
+        }
+    </script>
+</body>
+</html>
