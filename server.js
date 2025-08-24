@@ -57,9 +57,9 @@ app.get('/', (req, res) => {
                     <p>Create new payment buttons</p>
                 </a>
                 
-                <a href="/all-transactions" class="link-card">
+                <a href="/GiyaPayStatusFrontend.html" class="link-card">
                     <h3>📊 View All Transactions</h3>
-                    <p>See transactions in table format</p>
+                    <p>See transactions with summary and styling</p>
                 </a>
             </div>
         </div>
