@@ -342,7 +342,8 @@
         const GIYAPAY_CONFIG = {
             merchantId: "mmmda",
             secretKey: "e7c7bb007d69d5d4444b09e1e5a6437aa9b71a4687afe93bf6a3cfcd0ea03e814d846ceb44c00750a864088edf67e877918aa70bc2d8354122ddc2b8dfcf8da8",
-            apiUrl: "https://giyapay.dev.symphco.com/v1"
+            checkoutUrl: "https://pay.giyapay.com/checkout",
+            apiUrl: "https://pay.giyapay.com/api/1.0"
         };
 
         // Generate nonce for API requests
@@ -424,8 +425,8 @@
 
                 console.log('Making payment request to GiyaPay:', paymentRequest);
 
-                // Make API request to GiyaPay
-                const response = await fetch(`${GIYAPAY_CONFIG.apiUrl}/checkout`, {
+                // Make API request to GiyaPay checkout
+                const response = await fetch(GIYAPAY_CONFIG.checkoutUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -438,11 +439,23 @@
                 console.log('GiyaPay response:', result);
 
                 if (response.ok && result.checkout_url) {
-                    // Update transaction status
+                    // Update transaction status to pending
                     updateTransactionStatus(paymentData.reference, 'pending');
                     
-                    // Redirect to GiyaPay checkout
-                    window.location.href = result.checkout_url;
+                    // Open GiyaPay hosted payment page in new window/tab
+                    window.open(result.checkout_url, '_blank');
+                    
+                    // Show message to user
+                    document.getElementById('payment-form').style.display = 'none';
+                    document.getElementById('processing-screen').innerHTML = `
+                        <div class="processing-content">
+                            <div class="spinner"></div>
+                            <h3>Payment Window Opened</h3>
+                            <p>Complete your payment in the GiyaPay window.</p>
+                            <button onclick="checkPaymentStatus('${paymentData.reference}')" class="btn btn-primary">Check Payment Status</button>
+                            <button onclick="window.location.href='index.html'" class="btn btn-secondary">Return to Home</button>
+                        </div>
+                    `;
                 } else {
                     throw new Error(result.message || 'Payment creation failed');
                 }
@@ -453,6 +466,66 @@
                 // Fallback to simulation mode for testing
                 console.log('Falling back to simulation mode');
                 simulatePayment();
+            }
+        }
+
+        // Check payment status from GiyaPay API
+        async function checkPaymentStatus(referenceNumber) {
+            try {
+                console.log('Checking payment status for:', referenceNumber);
+                
+                const response = await fetch(`${GIYAPAY_CONFIG.apiUrl}/transaction/${referenceNumber}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const transactionData = await response.json();
+                    console.log('Transaction status from GiyaPay:', transactionData);
+                    
+                    // Update local storage with server data
+                    updateTransactionFromServer(referenceNumber, transactionData);
+                    
+                    // Redirect based on status
+                    const status = transactionData.status || transactionData.transaction_status;
+                    if (status === 'completed' || status === 'success' || status === 'paid') {
+                        window.location.href = `success.html?ref=${referenceNumber}&amount=${transactionData.amount}&method=${transactionData.payment_method}&status=${status}`;
+                    } else if (status === 'failed' || status === 'error') {
+                        window.location.href = `error.html?ref=${referenceNumber}&amount=${transactionData.amount}&method=${transactionData.payment_method}&status=${status}&error=${encodeURIComponent(transactionData.message || 'Payment failed')}`;
+                    } else if (status === 'cancelled' || status === 'canceled') {
+                        window.location.href = `cancel.html?ref=${referenceNumber}&amount=${transactionData.amount}&method=${transactionData.payment_method}&status=${status}`;
+                    } else {
+                        // Still pending or unknown status
+                        alert(`Payment Status: ${status || 'Unknown'}. Please try checking again in a moment.`);
+                    }
+                } else {
+                    console.error('Failed to get transaction status:', response.status);
+                    alert('Unable to check payment status. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error checking payment status:', error);
+                alert('Error checking payment status. Please try again.');
+            }
+        }
+
+        // Update transaction from server data
+        function updateTransactionFromServer(referenceNumber, serverData) {
+            const transactions = getTransactions();
+            const transactionIndex = transactions.findIndex(t => t.referenceNumber === referenceNumber);
+            
+            if (transactionIndex !== -1) {
+                transactions[transactionIndex].status = serverData.status || serverData.transaction_status || 'pending';
+                transactions[transactionIndex].paymentMethod = serverData.payment_method || 'QRPh';
+                transactions[transactionIndex].checkedAt = new Date().toISOString();
+                transactions[transactionIndex].serverData = serverData;
+                
+                if (serverData.completed_at || serverData.updated_at) {
+                    transactions[transactionIndex].completedAt = serverData.completed_at || serverData.updated_at;
+                }
+                
+                localStorage.setItem('giyapay_transactions', JSON.stringify(transactions));
             }
         }
 

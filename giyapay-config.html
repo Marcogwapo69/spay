@@ -118,12 +118,12 @@
                 <button onclick="toggleSecretKey()">Show/Hide</button>
             </div>
             <div class="form-group">
+                <label>Checkout URL:</label>
+                <input type="text" id="checkout-url" value="https://pay.giyapay.com/checkout" readonly>
+            </div>
+            <div class="form-group">
                 <label>API Base URL:</label>
-                <select id="api-url">
-                    <option value="https://giyapay.dev.symphco.com/v1">Development (Default)</option>
-                    <option value="https://giyapay.symphco.com/v1">Production</option>
-                    <option value="https://api.giyapay.com/v1">Alternative Production</option>
-                </select>
+                <input type="text" id="api-url" value="https://pay.giyapay.com/api/1.0" readonly>
             </div>
         </div>
 
@@ -151,7 +151,17 @@
             </div>
 
             <div class="endpoint-test">
-                <h4>3. Test API Connectivity</h4>
+                <h4>3. Test Transaction Status API</h4>
+                <div class="form-group">
+                    <label>Reference Number:</label>
+                    <input type="text" id="test-reference" placeholder="Enter reference number">
+                </div>
+                <button onclick="testTransactionStatus()">Test Transaction Status</button>
+                <div id="transaction-test-result"></div>
+            </div>
+
+            <div class="endpoint-test">
+                <h4>4. Test API Connectivity</h4>
                 <button onclick="testAPIConnectivity()">Test Connection</button>
                 <div id="connectivity-test-result"></div>
             </div>
@@ -181,6 +191,9 @@
         const GIYAPAY_CONFIG = {
             merchantId: "mmmda",
             secretKey: "e7c7bb007d69d5d4444b09e1e5a6437aa9b71a4687afe93bf6a3cfcd0ea03e814d846ceb44c00750a864088edf67e877918aa70bc2d8354122ddc2b8dfcf8da8",
+            get checkoutUrl() {
+                return document.getElementById('checkout-url').value;
+            },
             get apiUrl() {
                 return document.getElementById('api-url').value;
             }
@@ -262,6 +275,52 @@
             }
         }
 
+        // Test transaction status API
+        async function testTransactionStatus() {
+            const resultDiv = document.getElementById('transaction-test-result');
+            const referenceNumber = document.getElementById('test-reference').value;
+            
+            if (!referenceNumber) {
+                resultDiv.innerHTML = '<div class="status error">Please enter a reference number</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div class="status info">Testing transaction status API...</div>';
+
+            try {
+                const response = await fetch(`${GIYAPAY_CONFIG.apiUrl}/transaction/${referenceNumber}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="status success">Transaction found!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else if (response.status === 404) {
+                    resultDiv.innerHTML = `
+                        <div class="status warning">Transaction not found (404)</div>
+                        <p>Reference number: ${referenceNumber} does not exist on GiyaPay server</p>
+                    `;
+                } else {
+                    const errorData = await response.text();
+                    resultDiv.innerHTML = `
+                        <div class="status error">API returned status ${response.status}</div>
+                        <pre>${errorData}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="status error">Connection failed: ${error.message}</div>
+                    <div class="status info">This might be normal if CORS is blocking the request.</div>
+                `;
+            }
+        }
+
         // Test API connectivity
         async function testAPIConnectivity() {
             const resultDiv = document.getElementById('connectivity-test-result');
@@ -276,10 +335,10 @@
                 });
 
                 if (response.ok) {
-                    const data = await response.json();
+                    const data = await response.text();
                     resultDiv.innerHTML = `
                         <div class="status success">API is reachable!</div>
-                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <pre>${data}</pre>
                     `;
                 } else {
                     resultDiv.innerHTML = `
@@ -332,7 +391,7 @@
                     cancel_url: `${window.location.origin}/cancel.html`
                 };
 
-                const response = await fetch(`${GIYAPAY_CONFIG.apiUrl}/checkout`, {
+                const response = await fetch(GIYAPAY_CONFIG.checkoutUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -422,6 +481,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('GiyaPay Configuration Test Page Loaded');
             console.log('Merchant ID:', GIYAPAY_CONFIG.merchantId);
+            console.log('Checkout URL:', GIYAPAY_CONFIG.checkoutUrl);
             console.log('API URL:', GIYAPAY_CONFIG.apiUrl);
         });
     </script>

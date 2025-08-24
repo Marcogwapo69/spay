@@ -209,6 +209,12 @@
             border: 1px solid #f5c6cb;
         }
 
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
         @media (max-width: 768px) {
             .nav-buttons {
                 flex-direction: column;
@@ -327,6 +333,14 @@
 
     <script>
         // Local storage keys
+        // GiyaPay API Configuration
+        const GIYAPAY_CONFIG = {
+            merchantId: "mmmda",
+            secretKey: "e7c7bb007d69d5d4444b09e1e5a6437aa9b71a4687afe93bf6a3cfcd0ea03e814d846ceb44c00750a864088edf67e877918aa70bc2d8354122ddc2b8dfcf8da8",
+            checkoutUrl: "https://pay.giyapay.com/checkout",
+            apiUrl: "https://pay.giyapay.com/api/1.0"
+        };
+
         const TRANSACTIONS_KEY = 'giyapay_transactions';
         
         // Initialize
@@ -420,9 +434,100 @@
             return stored ? JSON.parse(stored) : [];
         }
 
-        // Load and display transactions
-        function loadTransactions() {
+        // Load and display transactions (with server sync)
+        async function loadTransactions() {
             const transactions = getTransactions();
+            
+            // Show loading state
+            const tbody = document.getElementById('transactions-body');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 30px; color: #666;">Loading transactions...</td></tr>';
+            
+            // Sync with server for recent transactions
+            await syncTransactionsWithServer(transactions);
+            
+            // Get updated transactions after sync
+            const updatedTransactions = getTransactions();
+            displayTransactions(updatedTransactions);
+        }
+
+        // Sync transactions with GiyaPay server
+        async function syncTransactionsWithServer(transactions) {
+            console.log('Syncing transactions with GiyaPay server...');
+            
+            for (const transaction of transactions.slice(-10)) { // Sync last 10 transactions
+                if (!transaction.serverSynced) {
+                    try {
+                        await checkTransactionStatus(transaction.referenceNumber);
+                        await new Promise(resolve => setTimeout(resolve, 500)); // Rate limiting
+                    } catch (error) {
+                        console.error(`Failed to sync transaction ${transaction.referenceNumber}:`, error);
+                    }
+                }
+            }
+        }
+
+        // Check transaction status from GiyaPay API
+        async function checkTransactionStatus(referenceNumber) {
+            try {
+                const response = await fetch(`${GIYAPAY_CONFIG.apiUrl}/transaction/${referenceNumber}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const serverData = await response.json();
+                    updateTransactionFromServer(referenceNumber, serverData);
+                    return serverData;
+                } else if (response.status === 404) {
+                    // Transaction not found on server (may be local only)
+                    console.log(`Transaction ${referenceNumber} not found on server`);
+                    return null;
+                } else {
+                    throw new Error(`API returned ${response.status}`);
+                }
+            } catch (error) {
+                console.error(`Error checking transaction ${referenceNumber}:`, error);
+                return null;
+            }
+        }
+
+        // Update transaction from server data
+        function updateTransactionFromServer(referenceNumber, serverData) {
+            const transactions = getTransactions();
+            const transactionIndex = transactions.findIndex(t => t.referenceNumber === referenceNumber);
+            
+            if (transactionIndex !== -1) {
+                const transaction = transactions[transactionIndex];
+                
+                // Update with server data
+                transaction.status = serverData.status || serverData.transaction_status || transaction.status;
+                transaction.paymentMethod = serverData.payment_method || transaction.paymentMethod;
+                transaction.checkedAt = new Date().toISOString();
+                transaction.serverData = serverData;
+                transaction.serverSynced = true;
+                
+                // Update amount if different (server amount might be in centavos)
+                if (serverData.amount) {
+                    const serverAmount = parseFloat(serverData.amount);
+                    if (serverAmount > 1000) {
+                        transaction.amount = serverAmount / 100; // Convert centavos to pesos
+                    } else {
+                        transaction.amount = serverAmount;
+                    }
+                }
+                
+                if (serverData.completed_at || serverData.updated_at) {
+                    transaction.completedAt = serverData.completed_at || serverData.updated_at;
+                }
+                
+                localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+            }
+        }
+
+        // Display transactions in the table
+        function displayTransactions(transactions) {
             const tbody = document.getElementById('transactions-body');
             
             if (transactions.length === 0) {
@@ -436,37 +541,71 @@
                     <td>₱${transaction.amount.toFixed(2)}</td>
                     <td>${transaction.description}</td>
                     <td>${transaction.merchant}</td>
-                    <td><span class="status-badge status-${transaction.status}">${transaction.status}</span></td>
+                    <td>
+                        <span class="status-badge status-${transaction.status}">${transaction.status}</span>
+                        ${transaction.serverSynced ? '<span style="color: #28a745; font-size: 12px;">✓</span>' : ''}
+                    </td>
                 </tr>
             `).join('');
         }
 
-        // Check payment status
-        function checkStatus(event) {
+        // Check payment status (with server sync)
+        async function checkStatus(event) {
             event.preventDefault();
             
             const formData = new FormData(event.target);
             const referenceNumber = formData.get('reference');
             
-            const transactions = getTransactions();
-            const transaction = transactions.find(t => t.referenceNumber === referenceNumber);
+            // Show loading state
+            showAlert('status-alert', 'Checking payment status with GiyaPay server...', 'info');
+            document.getElementById('status-result').style.display = 'none';
             
-            if (transaction) {
-                const statusDetails = `
-                    <strong>Reference Number:</strong> ${transaction.referenceNumber}<br>
-                    <strong>Amount:</strong> ₱${transaction.amount.toFixed(2)}<br>
-                    <strong>Description:</strong> ${transaction.description}<br>
-                    <strong>Merchant:</strong> ${transaction.merchant}<br>
-                    <strong>Status:</strong> <span class="status-badge status-${transaction.status}">${transaction.status}</span><br>
-                    <strong>Created:</strong> ${new Date(transaction.createdAt).toLocaleString()}
-                `;
+            try {
+                // First check local storage
+                const transactions = getTransactions();
+                let transaction = transactions.find(t => t.referenceNumber === referenceNumber);
                 
-                document.getElementById('status-details').innerHTML = statusDetails;
-                document.getElementById('status-result').style.display = 'block';
-                showAlert('status-alert', 'Transaction found!', 'success');
-            } else {
-                document.getElementById('status-result').style.display = 'none';
-                showAlert('status-alert', 'Transaction not found. Please check your reference number.', 'error');
+                // Then check with GiyaPay server
+                const serverData = await checkTransactionStatus(referenceNumber);
+                
+                if (serverData) {
+                    // Update local data with server data
+                    updateTransactionFromServer(referenceNumber, serverData);
+                    
+                    // Get updated transaction
+                    const updatedTransactions = getTransactions();
+                    transaction = updatedTransactions.find(t => t.referenceNumber === referenceNumber);
+                } else if (!transaction) {
+                    // Transaction not found locally or on server
+                    document.getElementById('status-result').style.display = 'none';
+                    showAlert('status-alert', 'Transaction not found. Please check your reference number.', 'error');
+                    return;
+                }
+                
+                if (transaction) {
+                    const statusDetails = `
+                        <strong>Reference Number:</strong> ${transaction.referenceNumber}<br>
+                        <strong>Amount:</strong> ₱${transaction.amount.toFixed(2)}<br>
+                        <strong>Description:</strong> ${transaction.description}<br>
+                        <strong>Merchant:</strong> ${transaction.merchant}<br>
+                        <strong>Status:</strong> <span class="status-badge status-${transaction.status}">${transaction.status}</span><br>
+                        <strong>Payment Method:</strong> ${transaction.paymentMethod || 'QRPh'}<br>
+                        <strong>Created:</strong> ${new Date(transaction.createdAt).toLocaleString()}<br>
+                        ${transaction.completedAt ? `<strong>Completed:</strong> ${new Date(transaction.completedAt).toLocaleString()}<br>` : ''}
+                        <strong>Data Source:</strong> ${transaction.serverSynced ? 'GiyaPay Server ✓' : 'Local Only'}
+                    `;
+                    
+                    document.getElementById('status-details').innerHTML = statusDetails;
+                    document.getElementById('status-result').style.display = 'block';
+                    showAlert('status-alert', serverData ? 'Status updated from GiyaPay server!' : 'Transaction found in local storage!', 'success');
+                } else {
+                    document.getElementById('status-result').style.display = 'none';
+                    showAlert('status-alert', 'Transaction not found. Please check your reference number.', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error checking status:', error);
+                showAlert('status-alert', 'Error checking payment status. Please try again.', 'error');
             }
         }
 
