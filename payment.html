@@ -338,12 +338,12 @@
             document.getElementById('pay-btn').disabled = false;
         }
 
-        // GiyaPay API Configuration
+        // GiyaPay API Configuration (Sandbox Environment)
         const GIYAPAY_CONFIG = {
             merchantId: "mmmda",
             secretKey: "e7c7bb007d69d5d4444b09e1e5a6437aa9b71a4687afe93bf6a3cfcd0ea03e814d846ceb44c00750a864088edf67e877918aa70bc2d8354122ddc2b8dfcf8da8",
-            checkoutUrl: "https://pay.giyapay.com/checkout",
-            apiUrl: "https://pay.giyapay.com/api/1.0"
+            checkoutUrl: "https://sandbox.giyapay.com/checkout",
+            apiUrl: "https://sandbox.giyapay.com/api/1.0"
         };
 
         // Generate nonce for API requests
@@ -422,81 +422,61 @@
                     cancel_callback: `${window.location.origin}/cancel.html`
                 };
 
-                console.log('Making payment request to GiyaPay:', paymentRequest);
+                console.log('Creating GiyaPay payment form:', paymentRequest);
 
-                // Create form data for GiyaPay (application/x-www-form-urlencoded)
-                const formData = new URLSearchParams();
-                Object.keys(paymentRequest).forEach(key => {
-                    formData.append(key, paymentRequest[key]);
-                });
-
-                // Make API request to GiyaPay checkout (as per documentation)
-                const response = await fetch(GIYAPAY_CONFIG.checkoutUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'Cache-Control': 'no-cache'
-                    },
-                    body: formData
-                });
-
-                // Check if response is JSON or redirect
-                const contentType = response.headers.get('content-type');
-                let result;
+                // Create HTML form for GiyaPay submission (as per documentation)
+                const form = document.createElement('form');
+                form.action = GIYAPAY_CONFIG.checkoutUrl;
+                form.method = 'POST';
+                form.target = '_blank'; // Open in new tab
                 
-                if (contentType && contentType.includes('application/json')) {
-                    result = await response.json();
-                    console.log('GiyaPay JSON response:', result);
-                } else {
-                    // If GiyaPay redirects to payment page, we need to handle it differently
-                    const responseText = await response.text();
-                    console.log('GiyaPay response:', responseText);
-                    
-                    // Check if we got a redirect URL or payment link
-                    if (response.url && response.url.includes('giyapay.com')) {
-                        result = { payment_link: response.url };
-                    } else {
-                        // Try to extract payment link from response text
-                        const linkMatch = responseText.match(/https:\/\/pay\.giyapay\.com\/qrph\/processing\/[A-Z0-9-]+/);
-                        if (linkMatch) {
-                            result = { payment_link: linkMatch[0] };
-                        } else {
-                            throw new Error('Unable to extract payment link from response');
-                        }
-                    }
-                }
+                // Add all payment parameters as hidden inputs
+                Object.keys(paymentRequest).forEach(key => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = paymentRequest[key];
+                    form.appendChild(input);
+                });
 
-                if (response.ok && (result.payment_link || result.checkout_url || result.qrph_link)) {
-                    // Update transaction status to pending
-                    updateTransactionStatus(paymentData.reference, 'pending');
-                    
-                    // Get the payment link (format: https://pay.giyapay.com/qrph/processing/348L-NFBL-FHPB-MFDF)
-                    const paymentLink = result.payment_link || result.checkout_url || result.qrph_link;
-                    
-                    // Show the payment link to user
-                    document.getElementById('payment-form').style.display = 'none';
-                    document.getElementById('processing-screen').innerHTML = `
-                        <div class="processing-content">
-                            <div class="success-icon">✓</div>
-                            <h3>Payment Link Generated!</h3>
-                            <p>Your GiyaPay payment link has been created successfully.</p>
-                            <div class="payment-link-container" style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; border: 2px dashed #007bff;">
-                                <label style="font-weight: bold; color: #333; display: block; margin-bottom: 10px;">Payment Link:</label>
-                                <input type="text" value="${paymentLink}" readonly style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 14px;" onclick="this.select()">
-                            </div>
-                            <div class="button-group" style="margin-top: 20px;">
-                                <button onclick="window.open('${paymentLink}', '_blank')" class="btn btn-primary" style="margin: 5px;">Open Payment Link</button>
-                                <button onclick="copyPaymentLink('${paymentLink}')" class="btn btn-secondary" style="margin: 5px;">Copy Link</button>
-                                <button onclick="checkPaymentStatus('${paymentData.reference}')" class="btn btn-info" style="margin: 5px;">Check Status</button>
-                            </div>
-                            <div style="margin-top: 20px;">
-                                <button onclick="window.location.href='index.html'" class="btn btn-outline">Return to Home</button>
-                            </div>
+                // Update transaction status to pending
+                updateTransactionStatus(paymentData.reference, 'pending');
+
+                // Show processing screen with form submission
+                document.getElementById('payment-form').style.display = 'none';
+                document.getElementById('processing-screen').innerHTML = `
+                    <div class="processing-content">
+                        <div class="success-icon">✓</div>
+                        <h3>Redirecting to GiyaPay...</h3>
+                        <p>You will be redirected to GiyaPay to complete your payment.</p>
+                        <div style="margin: 30px 0;">
+                            <div class="spinner"></div>
+                            <p style="margin-top: 15px;">Opening payment page in new window...</p>
                         </div>
-                    `;
-                } else {
-                    throw new Error(result?.message || 'Payment link generation failed');
-                }
+                        <div class="button-group" style="margin-top: 20px;">
+                            <button onclick="submitGiyaPayForm()" class="btn btn-primary" style="margin: 5px;">Click here if page doesn't open</button>
+                            <button onclick="checkPaymentStatus('${paymentData.reference}')" class="btn btn-info" style="margin: 5px;">Check Payment Status</button>
+                            <button onclick="window.location.href='index.html'" class="btn btn-outline" style="margin: 5px;">Return to Home</button>
+                        </div>
+                    </div>
+                `;
+
+                // Store form globally for manual submission if needed
+                window.giyaPayForm = form;
+
+                // Append form to body and submit automatically
+                document.body.appendChild(form);
+                
+                // Submit form after a short delay to allow UI update
+                setTimeout(() => {
+                    form.submit();
+                    // Remove form after submission
+                    setTimeout(() => {
+                        if (form.parentNode) {
+                            form.parentNode.removeChild(form);
+                        }
+                    }, 1000);
+                }, 500);
 
             } catch (error) {
                 console.error('Payment error:', error);
@@ -585,6 +565,15 @@
             // Redirect to success page
             const successUrl = `success.html?ref=${paymentData.reference}&amount=${paymentData.amount}&method=${selectedMethod}`;
             window.location.href = successUrl;
+        }
+
+        // Manual form submission function
+        function submitGiyaPayForm() {
+            if (window.giyaPayForm) {
+                window.giyaPayForm.submit();
+            } else {
+                alert('Payment form not available. Please try creating a new payment.');
+            }
         }
 
         // Copy payment link to clipboard
