@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Success</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 20px; border-radius: 5px; }
+        .details { background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="success">
+        <h2>✅ Payment Successful!</h2>
+        <p>Your payment has been processed successfully.</p>
+    </div>
+    
+    <div class="details">
+        <h3>Transaction Details:</h3>
+        <div id="transaction-details"></div>
+    </div>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const details = document.getElementById('transaction-details');
+        
+        if (urlParams.toString()) {
+            let html = '<ul>';
+            for (const [key, value] of urlParams) {
+                html += `<li><strong>${key}:</strong> ${value}</li>`;
+            }
+            html += '</ul>';
+            details.innerHTML = html;
+            
+            // Update payment status to successful
+            const orderId = urlParams.get('order_id') || urlParams.get('reference') || urlParams.get('ref');
+            
+            if (orderId) {
+                const statusData = {
+                    order_id: orderId,
+                    status: 'success'
+                };
+                
+                // Send to update status endpoint
+                fetch('/update-payment-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(statusData)
+                }).then(response => response.json())
+                  .then(data => {
+                      console.log('Payment status updated successfully:', data);
+                      if (data.changes > 0) {
+                          console.log('Transaction marked as paid');
+                      }
+                  }).catch(error => {
+                      console.error('Error updating payment status:', error);
+                  });
+            } else {
+                console.log('No order ID found in URL parameters');
+            }
+        } else {
+            details.innerHTML = '<p>No transaction details available.</p>';
+        }
+    </script>
+</body>
+</html>
