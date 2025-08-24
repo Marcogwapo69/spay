@@ -203,29 +203,74 @@
     </div>
 
     <script>
-        // Get URL parameters
+        // Get URL parameters (supports both local redirects and GiyaPay callbacks)
         const urlParams = new URLSearchParams(window.location.search);
-        const referenceNumber = urlParams.get('ref') || 'N/A';
-        const amount = urlParams.get('amount') || '0';
-        const paymentMethod = urlParams.get('method') || 'N/A';
+        const referenceNumber = urlParams.get('ref') || urlParams.get('order_id') || 'N/A';
+        let amount = urlParams.get('amount') || '0';
+        const paymentMethod = urlParams.get('method') || urlParams.get('payment_method') || 'qrph';
+        const status = urlParams.get('status') || 'completed';
+        
+        // Convert amount from centavos if it's a GiyaPay callback
+        if (urlParams.get('order_id') && parseFloat(amount) > 1000) {
+            amount = (parseFloat(amount) / 100).toString(); // Convert centavos to pesos
+        }
         
         // Format payment method name
         function formatPaymentMethod(method) {
             const methods = {
                 'qrph': 'QRPh',
+                'instapay': 'QRPh (InstaPay)',
                 'gcash': 'GCash',
                 'paymaya': 'PayMaya',
                 'card': 'Credit/Debit Card',
                 'bank': 'Online Banking'
             };
-            return methods[method] || 'QRPh';
+            return methods[method.toLowerCase()] || 'QRPh';
         }
         
-        // Display transaction details
-        document.getElementById('reference-number').textContent = referenceNumber;
-        document.getElementById('amount').textContent = `₱${parseFloat(amount).toFixed(2)}`;
-        document.getElementById('payment-method').textContent = formatPaymentMethod(paymentMethod);
-        document.getElementById('date').textContent = new Date().toLocaleString();
+        // Update transaction status from GiyaPay callback
+        function updateTransactionFromCallback() {
+            if (urlParams.get('order_id')) {
+                const webhookData = {
+                    merchant_id: urlParams.get('merchant_id'),
+                    order_id: urlParams.get('order_id'),
+                    amount: urlParams.get('amount'),
+                    currency: urlParams.get('currency') || 'PHP',
+                    customer_name: urlParams.get('customer_name'),
+                    description: urlParams.get('description'),
+                    status: status,
+                    payment_method: paymentMethod,
+                    timestamp: new Date().toISOString()
+                };
+                
+                console.log('GiyaPay success callback received:', webhookData);
+                
+                // Update transaction in localStorage
+                const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+                const transactionIndex = transactions.findIndex(t => t.referenceNumber === referenceNumber);
+                
+                if (transactionIndex !== -1) {
+                    transactions[transactionIndex].status = status;
+                    transactions[transactionIndex].paymentMethod = formatPaymentMethod(paymentMethod);
+                    transactions[transactionIndex].completedAt = webhookData.timestamp;
+                    transactions[transactionIndex].giyapayData = webhookData;
+                    
+                    localStorage.setItem('giyapay_transactions', JSON.stringify(transactions));
+                }
+            }
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Update transaction from callback if this is from GiyaPay
+            updateTransactionFromCallback();
+            
+            // Display transaction details
+            document.getElementById('reference-number').textContent = referenceNumber;
+            document.getElementById('amount').textContent = `₱${parseFloat(amount).toFixed(2)}`;
+            document.getElementById('payment-method').textContent = formatPaymentMethod(paymentMethod);
+            document.getElementById('date').textContent = new Date().toLocaleString();
+        });
 
         // Handle section parameter for homepage redirect
         const sectionParam = new URLSearchParams(window.location.search).get('section');

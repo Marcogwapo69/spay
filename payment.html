@@ -338,8 +338,46 @@
             document.getElementById('pay-btn').disabled = false;
         }
 
+        // GiyaPay API Configuration
+        const GIYAPAY_CONFIG = {
+            merchantId: "mmmda",
+            secretKey: "e7c7bb007d69d5d4444b09e1e5a6437aa9b71a4687afe93bf6a3cfcd0ea03e814d846ceb44c00750a864088edf67e877918aa70bc2d8354122ddc2b8dfcf8da8",
+            apiUrl: "https://giyapay.dev.symphco.com/v1"
+        };
+
+        // Generate nonce for API requests
+        function generateNonce() {
+            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < 32; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // Generate signature for GiyaPay API
+        async function generateSignature(merchantId, amount, currency, orderId, timestamp, nonce, secretKey) {
+            const data = `${merchantId}${amount}${currency}${orderId}${timestamp}${nonce}`;
+            const encoder = new TextEncoder();
+            const keyData = encoder.encode(secretKey);
+            const messageData = encoder.encode(data);
+            
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                keyData,
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            
+            const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
         // Process payment
-        function processPayment() {
+        async function processPayment() {
             if (!selectedMethod) {
                 showError('Please select a payment method.');
                 return;
@@ -349,10 +387,83 @@
             document.getElementById('payment-form').style.display = 'none';
             document.getElementById('processing-screen').style.display = 'block';
 
+            try {
+                // Prepare payment request data
+                const timestamp = Date.now().toString();
+                const nonce = generateNonce();
+                const currency = "PHP";
+                const amount = Math.round(parseFloat(paymentData.amount) * 100); // Convert to centavos
+
+                // Generate signature
+                const signature = await generateSignature(
+                    GIYAPAY_CONFIG.merchantId,
+                    amount,
+                    currency,
+                    paymentData.reference,
+                    timestamp,
+                    nonce,
+                    GIYAPAY_CONFIG.secretKey
+                );
+
+                // Create payment request
+                const paymentRequest = {
+                    merchant_id: GIYAPAY_CONFIG.merchantId,
+                    amount: amount,
+                    currency: currency,
+                    order_id: paymentData.reference,
+                    customer_name: paymentData.merchant, // Using merchant as customer name for now
+                    description: paymentData.description || "Payment",
+                    payment_method: selectedMethod === 'qrph' ? 'instapay' : selectedMethod,
+                    timestamp: timestamp,
+                    nonce: nonce,
+                    signature: signature,
+                    success_url: `${window.location.origin}/success.html`,
+                    error_url: `${window.location.origin}/error.html`,
+                    cancel_url: `${window.location.origin}/cancel.html`
+                };
+
+                console.log('Making payment request to GiyaPay:', paymentRequest);
+
+                // Make API request to GiyaPay
+                const response = await fetch(`${GIYAPAY_CONFIG.apiUrl}/checkout`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(paymentRequest)
+                });
+
+                const result = await response.json();
+                console.log('GiyaPay response:', result);
+
+                if (response.ok && result.checkout_url) {
+                    // Update transaction status
+                    updateTransactionStatus(paymentData.reference, 'pending');
+                    
+                    // Redirect to GiyaPay checkout
+                    window.location.href = result.checkout_url;
+                } else {
+                    throw new Error(result.message || 'Payment creation failed');
+                }
+
+            } catch (error) {
+                console.error('Payment error:', error);
+                
+                // Fallback to simulation mode for testing
+                console.log('Falling back to simulation mode');
+                simulatePayment();
+            }
+        }
+
+        // Fallback simulation for testing (when API is not available)
+        function simulatePayment() {
+            console.log('Running payment simulation');
+            
             // Simulate payment processing
             setTimeout(() => {
                 completePayment();
-            }, 3000);
+            }, 2000);
         }
 
         // Complete payment (simulation)

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Failed - GiyaPay</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .error-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: #dc3545;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: white;
+        }
+
+        h1 {
+            color: #dc3545;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+
+        .details {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .value {
+            color: #666;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .actions {
+            margin-top: 30px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            margin: 5px 10px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 1.5em;
+            }
+            
+            .btn {
+                display: block;
+                margin: 10px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">✕</div>
+        <h1>Payment Failed</h1>
+        <p class="subtitle">Unfortunately, your payment could not be processed.</p>
+        
+        <div class="details">
+            <div class="detail-row">
+                <span class="label">Reference Number:</span>
+                <span class="value" id="reference-number">Loading...</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Amount:</span>
+                <span class="value" id="amount">Loading...</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Payment Method:</span>
+                <span class="value" id="payment-method">Loading...</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Date:</span>
+                <span class="value" id="date">Loading...</span>
+            </div>
+        </div>
+
+        <div class="error-message" id="error-details">
+            Payment processing failed. Please try again or contact support if the problem persists.
+        </div>
+
+        <div class="actions">
+            <a href="javascript:retryPayment()" class="btn btn-primary">Try Again</a>
+            <a href="index.html" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters (supports both local redirects and GiyaPay callbacks)
+        const urlParams = new URLSearchParams(window.location.search);
+        const referenceNumber = urlParams.get('ref') || urlParams.get('order_id') || 'N/A';
+        let amount = urlParams.get('amount') || '0';
+        const paymentMethod = urlParams.get('method') || urlParams.get('payment_method') || 'qrph';
+        const errorMessage = urlParams.get('error') || urlParams.get('message') || 'Payment processing failed';
+        const status = urlParams.get('status') || 'failed';
+        
+        // Convert amount from centavos if it's a GiyaPay callback
+        if (urlParams.get('order_id') && parseFloat(amount) > 1000) {
+            amount = (parseFloat(amount) / 100).toString(); // Convert centavos to pesos
+        }
+        
+        // Format payment method name
+        function formatPaymentMethod(method) {
+            const methods = {
+                'qrph': 'QRPh',
+                'instapay': 'QRPh (InstaPay)',
+                'gcash': 'GCash',
+                'paymaya': 'PayMaya',
+                'card': 'Credit/Debit Card',
+                'bank': 'Online Banking'
+            };
+            return methods[method.toLowerCase()] || 'QRPh';
+        }
+        
+        // Update transaction status from GiyaPay callback
+        function updateTransactionFromCallback() {
+            if (urlParams.get('order_id')) {
+                const webhookData = {
+                    merchant_id: urlParams.get('merchant_id'),
+                    order_id: urlParams.get('order_id'),
+                    amount: urlParams.get('amount'),
+                    currency: urlParams.get('currency') || 'PHP',
+                    customer_name: urlParams.get('customer_name'),
+                    description: urlParams.get('description'),
+                    status: status,
+                    payment_method: paymentMethod,
+                    error_message: errorMessage,
+                    timestamp: new Date().toISOString()
+                };
+                
+                console.log('GiyaPay error callback received:', webhookData);
+                
+                // Update transaction in localStorage
+                const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+                const transactionIndex = transactions.findIndex(t => t.referenceNumber === referenceNumber);
+                
+                if (transactionIndex !== -1) {
+                    transactions[transactionIndex].status = status;
+                    transactions[transactionIndex].errorMessage = errorMessage;
+                    transactions[transactionIndex].giyapayData = webhookData;
+                    transactions[transactionIndex].checkedAt = webhookData.timestamp;
+                    
+                    localStorage.setItem('giyapay_transactions', JSON.stringify(transactions));
+                }
+            }
+        }
+        
+        // Retry payment function
+        function retryPayment() {
+            if (referenceNumber !== 'N/A') {
+                // Get transaction details from localStorage
+                const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+                const transaction = transactions.find(t => t.referenceNumber === referenceNumber);
+                
+                if (transaction) {
+                    // Redirect to payment page with original details
+                    const paymentUrl = `payment.html?ref=${referenceNumber}&amount=${transaction.amount}&desc=${encodeURIComponent(transaction.description)}&merchant=${encodeURIComponent(transaction.merchant)}`;
+                    window.location.href = paymentUrl;
+                    return;
+                }
+            }
+            
+            // Fallback to home page
+            window.location.href = 'index.html';
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Update transaction from callback if this is from GiyaPay
+            updateTransactionFromCallback();
+            
+            // Display transaction details
+            document.getElementById('reference-number').textContent = referenceNumber;
+            document.getElementById('amount').textContent = `₱${parseFloat(amount).toFixed(2)}`;
+            document.getElementById('payment-method').textContent = formatPaymentMethod(paymentMethod);
+            document.getElementById('date').textContent = new Date().toLocaleString();
+            
+            // Display error message
+            document.getElementById('error-details').textContent = errorMessage;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GiyaPay Webhook Handler</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .webhook-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .webhook-data {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GiyaPay Webhook Handler</h1>
+        
+        <div class="webhook-info">
+            <h3>Webhook Information</h3>
+            <p>This page simulates webhook handling for GiyaPay payment notifications.</p>
+            <p><strong>Webhook URL:</strong> <code id="webhook-url"></code></p>
+        </div>
+
+        <div id="webhook-status"></div>
+        
+        <div>
+            <h3>Simulate Webhook</h3>
+            <button onclick="simulateSuccessWebhook()">Simulate Success Payment</button>
+            <button onclick="simulateFailedWebhook()">Simulate Failed Payment</button>
+            <button onclick="simulateCancelledWebhook()">Simulate Cancelled Payment</button>
+        </div>
+
+        <div id="webhook-data"></div>
+        
+        <div>
+            <h3>Recent Transactions</h3>
+            <div id="transactions-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // GiyaPay Configuration
+        const GIYAPAY_CONFIG = {
+            merchantId: "mmmda",
+            secretKey: "e7c7bb007d69d5d4444b09e1e5a6437aa9b71a4687afe93bf6a3cfcd0ea03e814d846ceb44c00750a864088edf67e877918aa70bc2d8354122ddc2b8dfcf8da8"
+        };
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('webhook-url').textContent = window.location.origin + '/webhook.html';
+            displayTransactions();
+            
+            // Check for webhook data in URL params
+            handleWebhookFromUrl();
+        });
+
+        // Handle webhook data from URL parameters
+        function handleWebhookFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            if (urlParams.has('order_id')) {
+                const webhookData = {
+                    merchant_id: urlParams.get('merchant_id') || GIYAPAY_CONFIG.merchantId,
+                    order_id: urlParams.get('order_id'),
+                    amount: urlParams.get('amount'),
+                    currency: urlParams.get('currency') || 'PHP',
+                    customer_name: urlParams.get('customer_name'),
+                    description: urlParams.get('description'),
+                    status: urlParams.get('status') || 'completed',
+                    payment_method: urlParams.get('payment_method') || 'instapay',
+                    timestamp: new Date().toISOString()
+                };
+                
+                processWebhook(webhookData);
+            }
+        }
+
+        // Process webhook data
+        function processWebhook(webhookData) {
+            console.log('Processing webhook:', webhookData);
+            
+            // Display webhook data
+            document.getElementById('webhook-data').innerHTML = `
+                <h3>Received Webhook Data:</h3>
+                <div class="webhook-data">${JSON.stringify(webhookData, null, 2)}</div>
+            `;
+
+            // Validate webhook (in real implementation, verify signature)
+            if (webhookData.merchant_id === GIYAPAY_CONFIG.merchantId) {
+                // Update transaction status
+                updateTransactionStatus(webhookData.order_id, webhookData.status, webhookData);
+                
+                document.getElementById('webhook-status').innerHTML = `
+                    <div class="status success">
+                        Webhook processed successfully for order: ${webhookData.order_id}
+                    </div>
+                `;
+            } else {
+                document.getElementById('webhook-status').innerHTML = `
+                    <div class="status error">
+                        Invalid merchant ID in webhook data
+                    </div>
+                `;
+            }
+            
+            // Refresh transactions display
+            displayTransactions();
+        }
+
+        // Update transaction status in localStorage
+        function updateTransactionStatus(orderId, status, webhookData) {
+            const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+            const transactionIndex = transactions.findIndex(t => t.referenceNumber === orderId);
+            
+            if (transactionIndex !== -1) {
+                transactions[transactionIndex].status = status;
+                transactions[transactionIndex].checkedAt = new Date().toISOString();
+                transactions[transactionIndex].paymentMethod = webhookData.payment_method || 'QRPh';
+                transactions[transactionIndex].webhookData = webhookData;
+                
+                localStorage.setItem('giyapay_transactions', JSON.stringify(transactions));
+                
+                console.log(`Transaction ${orderId} updated to status: ${status}`);
+            } else {
+                console.log(`Transaction ${orderId} not found in local storage`);
+            }
+        }
+
+        // Display transactions
+        function displayTransactions() {
+            const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+            const listContainer = document.getElementById('transactions-list');
+            
+            if (transactions.length === 0) {
+                listContainer.innerHTML = '<p>No transactions found.</p>';
+                return;
+            }
+            
+            const html = transactions.slice(-5).reverse().map(transaction => `
+                <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                    <strong>Ref:</strong> ${transaction.referenceNumber}<br>
+                    <strong>Amount:</strong> ₱${transaction.amount}<br>
+                    <strong>Status:</strong> <span style="color: ${getStatusColor(transaction.status)}">${transaction.status}</span><br>
+                    <strong>Method:</strong> ${transaction.paymentMethod || 'N/A'}<br>
+                    <strong>Date:</strong> ${new Date(transaction.checkedAt || transaction.createdAt).toLocaleString()}
+                </div>
+            `).join('');
+            
+            listContainer.innerHTML = html;
+        }
+
+        // Get status color
+        function getStatusColor(status) {
+            switch(status) {
+                case 'completed': return '#28a745';
+                case 'failed': return '#dc3545';
+                case 'cancelled': return '#ffc107';
+                case 'pending': return '#007bff';
+                default: return '#6c757d';
+            }
+        }
+
+        // Simulate webhooks for testing
+        function simulateSuccessWebhook() {
+            const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+            const latestTransaction = transactions[transactions.length - 1];
+            
+            if (!latestTransaction) {
+                alert('No transactions found. Create a payment first.');
+                return;
+            }
+            
+            const webhookData = {
+                merchant_id: GIYAPAY_CONFIG.merchantId,
+                order_id: latestTransaction.referenceNumber,
+                amount: Math.round(latestTransaction.amount * 100),
+                currency: 'PHP',
+                customer_name: latestTransaction.merchant,
+                description: latestTransaction.description,
+                status: 'completed',
+                payment_method: 'instapay',
+                timestamp: new Date().toISOString()
+            };
+            
+            processWebhook(webhookData);
+        }
+
+        function simulateFailedWebhook() {
+            const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+            const latestTransaction = transactions[transactions.length - 1];
+            
+            if (!latestTransaction) {
+                alert('No transactions found. Create a payment first.');
+                return;
+            }
+            
+            const webhookData = {
+                merchant_id: GIYAPAY_CONFIG.merchantId,
+                order_id: latestTransaction.referenceNumber,
+                amount: Math.round(latestTransaction.amount * 100),
+                currency: 'PHP',
+                customer_name: latestTransaction.merchant,
+                description: latestTransaction.description,
+                status: 'failed',
+                payment_method: 'instapay',
+                timestamp: new Date().toISOString()
+            };
+            
+            processWebhook(webhookData);
+        }
+
+        function simulateCancelledWebhook() {
+            const transactions = JSON.parse(localStorage.getItem('giyapay_transactions') || '[]');
+            const latestTransaction = transactions[transactions.length - 1];
+            
+            if (!latestTransaction) {
+                alert('No transactions found. Create a payment first.');
+                return;
+            }
+            
+            const webhookData = {
+                merchant_id: GIYAPAY_CONFIG.merchantId,
+                order_id: latestTransaction.referenceNumber,
+                amount: Math.round(latestTransaction.amount * 100),
+                currency: 'PHP',
+                customer_name: latestTransaction.merchant,
+                description: latestTransaction.description,
+                status: 'cancelled',
+                payment_method: 'instapay',
+                timestamp: new Date().toISOString()
+            };
+            
+            processWebhook(webhookData);
+        }
+    </script>
+</body>
+</html>
