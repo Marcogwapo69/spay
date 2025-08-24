@@ -406,58 +406,96 @@
                     GIYAPAY_CONFIG.secretKey
                 );
 
-                // Create payment request
+                // Create payment request (following GiyaPay API specification)
                 const paymentRequest = {
                     merchant_id: GIYAPAY_CONFIG.merchantId,
                     amount: amount,
                     currency: currency,
                     order_id: paymentData.reference,
-                    customer_name: paymentData.merchant, // Using merchant as customer name for now
                     description: paymentData.description || "Payment",
-                    payment_method: selectedMethod === 'qrph' ? 'instapay' : selectedMethod,
+                    payment_method: "QRPH", // As per documentation
                     timestamp: timestamp,
                     nonce: nonce,
                     signature: signature,
-                    success_url: `${window.location.origin}/success.html`,
-                    error_url: `${window.location.origin}/error.html`,
-                    cancel_url: `${window.location.origin}/cancel.html`
+                    success_callback: `${window.location.origin}/success.html`,
+                    error_callback: `${window.location.origin}/error.html`,
+                    cancel_callback: `${window.location.origin}/cancel.html`
                 };
 
                 console.log('Making payment request to GiyaPay:', paymentRequest);
 
-                // Make API request to GiyaPay checkout
+                // Create form data for GiyaPay (application/x-www-form-urlencoded)
+                const formData = new URLSearchParams();
+                Object.keys(paymentRequest).forEach(key => {
+                    formData.append(key, paymentRequest[key]);
+                });
+
+                // Make API request to GiyaPay checkout (as per documentation)
                 const response = await fetch(GIYAPAY_CONFIG.checkoutUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Cache-Control': 'no-cache'
                     },
-                    body: JSON.stringify(paymentRequest)
+                    body: formData
                 });
 
-                const result = await response.json();
-                console.log('GiyaPay response:', result);
+                // Check if response is JSON or redirect
+                const contentType = response.headers.get('content-type');
+                let result;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                    console.log('GiyaPay JSON response:', result);
+                } else {
+                    // If GiyaPay redirects to payment page, we need to handle it differently
+                    const responseText = await response.text();
+                    console.log('GiyaPay response:', responseText);
+                    
+                    // Check if we got a redirect URL or payment link
+                    if (response.url && response.url.includes('giyapay.com')) {
+                        result = { payment_link: response.url };
+                    } else {
+                        // Try to extract payment link from response text
+                        const linkMatch = responseText.match(/https:\/\/pay\.giyapay\.com\/qrph\/processing\/[A-Z0-9-]+/);
+                        if (linkMatch) {
+                            result = { payment_link: linkMatch[0] };
+                        } else {
+                            throw new Error('Unable to extract payment link from response');
+                        }
+                    }
+                }
 
-                if (response.ok && result.checkout_url) {
+                if (response.ok && (result.payment_link || result.checkout_url || result.qrph_link)) {
                     // Update transaction status to pending
                     updateTransactionStatus(paymentData.reference, 'pending');
                     
-                    // Open GiyaPay hosted payment page in new window/tab
-                    window.open(result.checkout_url, '_blank');
+                    // Get the payment link (format: https://pay.giyapay.com/qrph/processing/348L-NFBL-FHPB-MFDF)
+                    const paymentLink = result.payment_link || result.checkout_url || result.qrph_link;
                     
-                    // Show message to user
+                    // Show the payment link to user
                     document.getElementById('payment-form').style.display = 'none';
                     document.getElementById('processing-screen').innerHTML = `
                         <div class="processing-content">
-                            <div class="spinner"></div>
-                            <h3>Payment Window Opened</h3>
-                            <p>Complete your payment in the GiyaPay window.</p>
-                            <button onclick="checkPaymentStatus('${paymentData.reference}')" class="btn btn-primary">Check Payment Status</button>
-                            <button onclick="window.location.href='index.html'" class="btn btn-secondary">Return to Home</button>
+                            <div class="success-icon">✓</div>
+                            <h3>Payment Link Generated!</h3>
+                            <p>Your GiyaPay payment link has been created successfully.</p>
+                            <div class="payment-link-container" style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; border: 2px dashed #007bff;">
+                                <label style="font-weight: bold; color: #333; display: block; margin-bottom: 10px;">Payment Link:</label>
+                                <input type="text" value="${paymentLink}" readonly style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 14px;" onclick="this.select()">
+                            </div>
+                            <div class="button-group" style="margin-top: 20px;">
+                                <button onclick="window.open('${paymentLink}', '_blank')" class="btn btn-primary" style="margin: 5px;">Open Payment Link</button>
+                                <button onclick="copyPaymentLink('${paymentLink}')" class="btn btn-secondary" style="margin: 5px;">Copy Link</button>
+                                <button onclick="checkPaymentStatus('${paymentData.reference}')" class="btn btn-info" style="margin: 5px;">Check Status</button>
+                            </div>
+                            <div style="margin-top: 20px;">
+                                <button onclick="window.location.href='index.html'" class="btn btn-outline">Return to Home</button>
+                            </div>
                         </div>
                     `;
                 } else {
-                    throw new Error(result.message || 'Payment creation failed');
+                    throw new Error(result?.message || 'Payment link generation failed');
                 }
 
             } catch (error) {
@@ -547,6 +585,30 @@
             // Redirect to success page
             const successUrl = `success.html?ref=${paymentData.reference}&amount=${paymentData.amount}&method=${selectedMethod}`;
             window.location.href = successUrl;
+        }
+
+        // Copy payment link to clipboard
+        function copyPaymentLink(link) {
+            navigator.clipboard.writeText(link).then(function() {
+                // Show success message
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.backgroundColor = '#28a745';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.backgroundColor = '';
+                }, 2000);
+            }).catch(function() {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = link;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('Payment link copied to clipboard!');
+            });
         }
 
         // Update transaction status
