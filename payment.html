@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GiyaPay - Payment Processing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .payment-container {
+            max-width: 500px;
+            width: 100%;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .payment-header {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .payment-header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .payment-content {
+            padding: 30px;
+        }
+
+        .payment-details {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .detail-value {
+            color: #666;
+            text-align: right;
+        }
+
+        .amount {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .payment-methods {
+            margin-bottom: 30px;
+        }
+
+        .payment-methods h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .payment-method {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .payment-method:hover {
+            border-color: #667eea;
+            background: #f8f9fa;
+        }
+
+        .payment-method.selected {
+            border-color: #4CAF50;
+            background: #f0f8ff;
+        }
+
+        .payment-method-icon {
+            width: 40px;
+            height: 40px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .payment-method-info {
+            flex: 1;
+        }
+
+        .payment-method-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .payment-method-desc {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .processing {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .detail-row {
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            .detail-value {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="payment-container">
+        <div class="payment-header">
+            <h1>GiyaPay</h1>
+            <p>Secure Payment Processing</p>
+        </div>
+
+        <div class="payment-content">
+            <div id="payment-form">
+                <div class="payment-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Reference Number:</span>
+                        <span class="detail-value" id="ref-number">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Merchant:</span>
+                        <span class="detail-value" id="merchant">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Description:</span>
+                        <span class="detail-value" id="description">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Amount:</span>
+                        <span class="detail-value amount" id="amount">₱0.00</span>
+                    </div>
+                </div>
+
+                <div class="payment-methods">
+                    <h3>Payment Method</h3>
+                    
+                    <div class="payment-method selected" onclick="selectPaymentMethod('qrph')">
+                        <div class="payment-method-icon" style="background: #4CAF50;">QR</div>
+                        <div class="payment-method-info">
+                            <div class="payment-method-name">QRPh</div>
+                            <div class="payment-method-desc">Pay using QR Philippines - Secure and instant payment</div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="pay-btn" class="btn" onclick="processPayment()">
+                    Pay with QRPh
+                </button>
+
+                <a href="index.html" class="btn btn-secondary">
+                    Back to Main Page
+                </a>
+            </div>
+
+            <div id="processing-screen" style="display: none;">
+                <div class="processing">
+                    <div class="spinner"></div>
+                    <h3>Processing Payment...</h3>
+                    <p>Please wait while we process your payment.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedMethod = null;
+        let paymentData = {};
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPaymentData();
+        });
+
+        // Load payment data from URL parameters
+        function loadPaymentData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            paymentData = {
+                reference: urlParams.get('ref') || 'N/A',
+                amount: parseFloat(urlParams.get('amount')) || 0,
+                description: urlParams.get('desc') || 'N/A',
+                merchant: urlParams.get('merchant') || 'N/A'
+            };
+
+            // Display payment data
+            document.getElementById('ref-number').textContent = paymentData.reference;
+            document.getElementById('merchant').textContent = paymentData.merchant;
+            document.getElementById('description').textContent = paymentData.description;
+            document.getElementById('amount').textContent = `₱${paymentData.amount.toFixed(2)}`;
+
+            // Auto-select QRPH and enable payment button
+            selectedMethod = 'qrph';
+            document.getElementById('pay-btn').disabled = false;
+
+            // Validate payment data
+            if (!paymentData.reference || paymentData.reference === 'N/A' || paymentData.amount <= 0) {
+                showError('Invalid payment data. Please check your payment link.');
+            }
+        }
+
+        // Select payment method
+        function selectPaymentMethod(method) {
+            // Remove previous selection
+            document.querySelectorAll('.payment-method').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            // Add selection to clicked method
+            event.currentTarget.classList.add('selected');
+            selectedMethod = method;
+
+            // Enable pay button
+            document.getElementById('pay-btn').disabled = false;
+        }
+
+        // Process payment
+        function processPayment() {
+            if (!selectedMethod) {
+                showError('Please select a payment method.');
+                return;
+            }
+
+            // Show processing screen
+            document.getElementById('payment-form').style.display = 'none';
+            document.getElementById('processing-screen').style.display = 'block';
+
+            // Simulate payment processing
+            setTimeout(() => {
+                completePayment();
+            }, 3000);
+        }
+
+        // Complete payment (simulation)
+        function completePayment() {
+            // Update transaction status in localStorage
+            updateTransactionStatus(paymentData.reference, 'completed');
+
+            // Redirect to success page
+            const successUrl = `success.html?ref=${paymentData.reference}&amount=${paymentData.amount}&method=${selectedMethod}`;
+            window.location.href = successUrl;
+        }
+
+        // Update transaction status
+        function updateTransactionStatus(referenceNumber, status) {
+            const transactions = getTransactions();
+            const transactionIndex = transactions.findIndex(t => t.referenceNumber === referenceNumber);
+            
+            if (transactionIndex !== -1) {
+                transactions[transactionIndex].status = status;
+                transactions[transactionIndex].completedAt = new Date().toISOString();
+                transactions[transactionIndex].paymentMethod = selectedMethod;
+                localStorage.setItem('giyapay_transactions', JSON.stringify(transactions));
+            }
+        }
+
+        // Get transactions from localStorage
+        function getTransactions() {
+            const stored = localStorage.getItem('giyapay_transactions');
+            return stored ? JSON.parse(stored) : [];
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorHtml = `<div class="alert alert-error">${message}</div>`;
+            document.querySelector('.payment-content').insertAdjacentHTML('afterbegin', errorHtml);
+        }
+    </script>
+</body>
+</html>

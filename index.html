@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GiyaPay Transaction Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-btn.active {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .payment-link {
+            background: #f8f9fa;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            word-break: break-all;
+        }
+
+        .transactions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .transactions-table th,
+        .transactions-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .transactions-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+        }
+
+        .transactions-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .nav-buttons {
+                flex-direction: column;
+            }
+
+            .nav-btn {
+                width: 100%;
+            }
+
+            .transactions-table {
+                font-size: 14px;
+            }
+
+            .transactions-table th,
+            .transactions-table td {
+                padding: 10px 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GiyaPay Transaction Manager</h1>
+            <p>Manage your payment transactions with ease</p>
+        </div>
+
+        <div class="main-content">
+            <div class="nav-buttons">
+                <button class="nav-btn active" onclick="showSection('create')">Create Payment</button>
+                <button class="nav-btn" onclick="showSection('transactions')">View Transactions</button>
+                <button class="nav-btn" onclick="showSection('status')">Check Status</button>
+            </div>
+
+            <!-- Create Payment Section -->
+            <div id="create" class="section active">
+                <h2>Create New Payment</h2>
+                <div id="create-alert"></div>
+                
+                <form id="payment-form">
+                    <div class="form-group">
+                        <label for="amount">Amount (PHP)</label>
+                        <input type="number" id="amount" name="amount" step="0.01" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">Description</label>
+                        <input type="text" id="description" name="description" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="merchant">Merchant Name</label>
+                        <input type="text" id="merchant" name="merchant" required>
+                    </div>
+
+                    <button type="submit" class="btn">Generate Payment Link</button>
+                </form>
+
+                <div id="payment-result" style="display: none;">
+                    <h3>Payment Link Generated</h3>
+                    <div class="payment-link">
+                        <strong>Reference Number:</strong> <span id="ref-number"></span><br><br>
+                        <strong>Payment Link:</strong><br>
+                        <span id="payment-url"></span>
+                    </div>
+                    <br>
+                    <a id="payment-link-btn" href="#" target="_blank" class="btn">Open Payment Link</a>
+                </div>
+            </div>
+
+            <!-- Transactions Section -->
+            <div id="transactions" class="section">
+                <h2>Transaction History</h2>
+                <div id="transactions-alert"></div>
+                
+                <table class="transactions-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Merchant</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-body">
+                        <!-- Transactions will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Status Check Section -->
+            <div id="status" class="section">
+                <h2>Check Payment Status</h2>
+                <div id="status-alert"></div>
+                
+                <form id="status-form">
+                    <div class="form-group">
+                        <label for="status-ref">Reference Number</label>
+                        <input type="text" id="status-ref" name="reference" placeholder="Enter reference number" required>
+                    </div>
+                    
+                    <button type="submit" class="btn">Check Status</button>
+                </form>
+
+                <div id="status-result" style="display: none;">
+                    <h3>Transaction Details</h3>
+                    <div class="payment-link">
+                        <div id="status-details"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Local storage keys
+        const TRANSACTIONS_KEY = 'giyapay_transactions';
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTransactions();
+            
+            // Form event listeners
+            document.getElementById('payment-form').addEventListener('submit', createPayment);
+            document.getElementById('status-form').addEventListener('submit', checkStatus);
+        });
+
+        // Navigation
+        function showSection(sectionName) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Remove active class from all nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected section
+            document.getElementById(sectionName).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+            
+            // Load transactions if transactions section is shown
+            if (sectionName === 'transactions') {
+                loadTransactions();
+            }
+        }
+
+        // Generate reference number starting with 2836
+        function generateReferenceNumber() {
+            const prefix = '2836';
+            const randomDigits = Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
+            return prefix + randomDigits;
+        }
+
+        // Create payment
+        function createPayment(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const amount = formData.get('amount');
+            const description = formData.get('description');
+            const merchant = formData.get('merchant');
+            const referenceNumber = generateReferenceNumber();
+            
+            // Create transaction object
+            const transaction = {
+                id: Date.now(),
+                referenceNumber: referenceNumber,
+                amount: parseFloat(amount),
+                description: description,
+                merchant: merchant,
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+                paymentUrl: `payment.html?ref=${referenceNumber}&amount=${amount}&desc=${encodeURIComponent(description)}&merchant=${encodeURIComponent(merchant)}`
+            };
+            
+            // Save to local storage
+            saveTransaction(transaction);
+            
+            // Show result
+            document.getElementById('ref-number').textContent = referenceNumber;
+            document.getElementById('payment-url').textContent = transaction.paymentUrl;
+            document.getElementById('payment-link-btn').href = transaction.paymentUrl;
+            document.getElementById('payment-result').style.display = 'block';
+            
+            // Show success message
+            showAlert('create-alert', 'Payment link created successfully!', 'success');
+            
+            // Reset form
+            event.target.reset();
+        }
+
+        // Save transaction to local storage
+        function saveTransaction(transaction) {
+            const transactions = getTransactions();
+            transactions.push(transaction);
+            localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+        }
+
+        // Get transactions from local storage
+        function getTransactions() {
+            const stored = localStorage.getItem(TRANSACTIONS_KEY);
+            return stored ? JSON.parse(stored) : [];
+        }
+
+        // Load and display transactions
+        function loadTransactions() {
+            const transactions = getTransactions();
+            const tbody = document.getElementById('transactions-body');
+            
+            if (transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 30px; color: #666;">No transactions found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = transactions.map(transaction => `
+                <tr>
+                    <td>${new Date(transaction.createdAt).toLocaleDateString()}</td>
+                    <td>₱${transaction.amount.toFixed(2)}</td>
+                    <td>${transaction.description}</td>
+                    <td>${transaction.merchant}</td>
+                    <td><span class="status-badge status-${transaction.status}">${transaction.status}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // Check payment status
+        function checkStatus(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const referenceNumber = formData.get('reference');
+            
+            const transactions = getTransactions();
+            const transaction = transactions.find(t => t.referenceNumber === referenceNumber);
+            
+            if (transaction) {
+                const statusDetails = `
+                    <strong>Reference Number:</strong> ${transaction.referenceNumber}<br>
+                    <strong>Amount:</strong> ₱${transaction.amount.toFixed(2)}<br>
+                    <strong>Description:</strong> ${transaction.description}<br>
+                    <strong>Merchant:</strong> ${transaction.merchant}<br>
+                    <strong>Status:</strong> <span class="status-badge status-${transaction.status}">${transaction.status}</span><br>
+                    <strong>Created:</strong> ${new Date(transaction.createdAt).toLocaleString()}
+                `;
+                
+                document.getElementById('status-details').innerHTML = statusDetails;
+                document.getElementById('status-result').style.display = 'block';
+                showAlert('status-alert', 'Transaction found!', 'success');
+            } else {
+                document.getElementById('status-result').style.display = 'none';
+                showAlert('status-alert', 'Transaction not found. Please check your reference number.', 'error');
+            }
+        }
+
+        // Show alert message
+        function showAlert(containerId, message, type) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            
+            // Auto-hide success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    container.innerHTML = '';
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>
